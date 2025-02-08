@@ -25,7 +25,7 @@ def register():
 @api.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
-    user = User.query.filter_by(email=data['email'].first)
+    user = User.query.filter_by(email=data['email'].first())
 
     if not user or not check_password_hash(user.password, data['password']):
         return jsonify({"message": "Invalid credentials!"}), 401
