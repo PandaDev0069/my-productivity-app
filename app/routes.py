@@ -30,7 +30,7 @@ def login():
     if not user or not check_password_hash(user.password, data['password']):
         return jsonify({"message": "Invalid credentials!"}), 401
     
-    access_token = create_access_token(identity=user.id)
+    access_token = create_access_token(identity=str(user.id))
     return jsonify({"access_token": access_token, "message": "Login Successful!"})
 
 
@@ -43,11 +43,17 @@ def get_profile():
     if not user:
         return jsonify({"message": "User not found"}), 404
 
+    # Calculate user level based on XP
+    level = user.xp // 100  
+    xp_to_next_level = 100 - (user.xp % 100)
+
     return jsonify({
         "username": user.username,
         "email": user.email,
-        "xp": 120,  # Placeholder XP (you can calculate based on tasks completed)
-        "streaks": 5  # Placeholder streaks (add logic for actual streak tracking)
+        "xp": user.xp,
+        "level": level,
+        "xp_to_next_level": xp_to_next_level,
+        "streaks": 5  # Placeholder (replace with streak logic)
     })
 
 
@@ -66,15 +72,29 @@ def create_task():
     return jsonify({"message": "Task created successfully!"}), 201
 
 
-@api.route('/tasks', methods=['GET'])
+@api.route("/tasks", methods=["GET"])
 @jwt_required()
 def get_tasks():
     user_id = get_jwt_identity()
     tasks = Task.query.filter_by(user_id=user_id).all()
 
-    task_list = [{"id": t.id, "title": t.title, "due_date": t.due_date.strftime("%Y-%m-%d %H:%M:%S"), "completed": t.completed} for t in tasks]
-    
-    return jsonify(task_list)
+    print(f"Fetched Tasks: {tasks}")
+
+    try:
+        task_list = [{
+            "id": task.id,
+            "title": task.title,
+            "completed": task.completed,
+            "due_date": task.due_date.strftime("%Y-%m-%d %H:%M:%S") if task.due_date else "N/A"
+        } for task in tasks]
+
+
+        print("Tasks Response:", task_list)
+        return jsonify(task_list), 200
+
+    except Exception as e:
+        return jsonify({"msg": str(e)}), 422
+
 
 
 @api.route('/tasks/<int:task_id>', methods=['PUT'])
