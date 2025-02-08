@@ -1,19 +1,223 @@
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from app import db
-from app.models import User, Task
-from flask_jwt_extended import create_access_token
+from app.models import User, Task  , Note, Expense
+from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
+
 
 api = Blueprint('api', __name__)
+
+# Login and register Section
 
 @api.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
-    user = User(username=data['username'], email=data['email'], password=data['password'])
+    hashed_password = generate_password_hash(data['password'])
+
+    user = User(username=data['username'], email=data['email'], password=hashed_password)
     db.session.add(user)
     db.session.commit()
-    return jsonify({"message": "User registered!"}), 201
+    
+    return jsonify({"message": "User registered successfully!"}), 201
+
+
+@api.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    user = User.query.filter_by(email=data['email'].first)
+
+    if not user or not check_password_hash(user.password, data['password']):
+        return jsonify({"message": "Invalid credentials!"}), 401
+    
+    access_token = create_access_token(identity=user.id)
+    return jsonify({"access_token": access_token, "message": "Login Successful!"})
+
+# Tasks Section
+
+@api.route('/tasks', methods=['POST'])
+@jwt_required()
+def create_task():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+
+    new_task = Task(title=data['title'], due_date=datetime.strptime(data['due_date'], "%Y-%m-%d %H:%M:%S"), user_id=user_id)
+    db.session.add(new_task)
+    db.session.commit()
+
+    return jsonify({"message": "Task created successfully!"}), 201
+
 
 @api.route('/tasks', methods=['GET'])
+@jwt_required()
 def get_tasks():
-    tasks = Task.query.all()
-    return jsonify([{"id": t.id, "title": t.title, "due_date": t.due_date} for t in tasks])
+    user_id = get_jwt_identity()
+    tasks = Task.query.filter_by(user_id=user_id).all()
+
+    task_list = [{"id": t.id, "title": t.title, "due_date": t.due_date.strftime("%Y-%m-%d %H:%M:%S"), "completed": t.completed} for t in tasks]
+    
+    return jsonify(task_list)
+
+
+@api.route('/tasks/<int:task_id>', methods=['PUT'])
+@jwt_required()
+def update_task(task_id):
+    user_id = get_jwt_identity()
+    task = Task.query.filter_by(id=task_id, user_id=user_id).first()
+
+    if not task:
+        return jsonify({"message": "Task not found!"}), 404
+
+    task.completed = True
+    db.session.commit()
+
+    return jsonify({"message": "Task updated successfully!"})
+
+
+# Notes Section
+@api.route('/notes', methods=['POST'])
+@jwt_required()
+def create_note():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+
+    new_note = Note(
+        title=data['title'],
+        content=data['content'],  # Markdown content
+        user_id=user_id
+    )
+
+    db.session.add(new_note)
+    db.session.commit()
+
+    return jsonify({"message": "Note created successfully!", "note": new_note.to_dict()}), 201
+
+
+@api.route('/notes', methods=['GET'])
+@jwt_required()
+def get_notes():
+    user_id = get_jwt_identity()
+    notes = Note.query.filter_by(user_id=user_id).all()
+
+    return jsonify([note.to_dict() for note in notes])
+
+
+@api.route('/notes/<int:note_id>', methods=['GET'])
+@jwt_required()
+def get_note(note_id):
+    user_id = get_jwt_identity()
+    note = Note.query.filter_by(id=note_id, user_id=user_id).first()
+
+    if not note:
+        return jsonify({"message": "Note not found!"}), 404
+
+    return jsonify(note.to_dict())
+
+
+@api.route('/notes/<int:note_id>', methods=['PUT'])
+@jwt_required()
+def update_note(note_id):
+    user_id = get_jwt_identity()
+    note = Note.query.filter_by(id=note_id, user_id=user_id).first()
+
+    if not note:
+        return jsonify({"message": "Note not found!"}), 404
+
+    data = request.get_json()
+    note.title = data.get("title", note.title)
+    note.content = data.get("content", note.content)
+
+    db.session.commit()
+
+    return jsonify({"message": "Note updated successfully!", "note": note.to_dict()})
+
+
+@api.route('/notes/<int:note_id>', methods=['DELETE'])
+@jwt_required()
+def delete_note(note_id):
+    user_id = get_jwt_identity()
+    note = Note.query.filter_by(id=note_id, user_id=user_id).first()
+
+    if not note:
+        return jsonify({"message": "Note not found!"}), 404
+
+    db.session.delete(note)
+    db.session.commit()
+
+    return jsonify({"message": "Note deleted successfully!"})
+
+
+
+# Expenses Section
+
+@api.route('/expenses', methods=['POST'])
+@jwt_required()
+def add_expense():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+
+    new_expense = Expense(
+        amount=data['amount'],
+        category=data['category'],
+        date=datetime.strptime(data['date'], "%Y-%m-%d"),
+        user_id=user_id
+    )
+
+    db.session.add(new_expense)
+    db.session.commit()
+
+    return jsonify({"message": "Expense added successfully!", "expense": new_expense.to_dict()}), 201
+
+
+
+@api.route('/expenses', methods=['GET'])
+@jwt_required()
+def get_expenses():
+    user_id = get_jwt_identity()
+    expenses = Expense.query.filter_by(user_id=user_id).all()
+
+    return jsonify([expense.to_dict() for expense in expenses])
+
+@api.route('/expenses/<int:expense_id>', methods=['GET'])
+@jwt_required()
+def get_expense(expense_id):
+    user_id = get_jwt_identity()
+    expense = Expense.query.filter_by(id=expense_id, user_id=user_id).first()
+
+    if not expense:
+        return jsonify({"message": "Expense not found!"}), 404
+
+    return jsonify(expense.to_dict())
+
+
+@api.route('/expenses/<int:expense_id>', methods=['PUT'])
+@jwt_required()
+def update_expense(expense_id):
+    user_id = get_jwt_identity()
+    expense = Expense.query.filter_by(id=expense_id, user_id=user_id).first()
+
+    if not expense:
+        return jsonify({"message": "Expense not found!"}), 404
+
+    data = request.get_json()
+    expense.amount = data.get("amount", expense.amount)
+    expense.category = data.get("category", expense.category)
+
+    db.session.commit()
+
+    return jsonify({"message": "Expense updated successfully!", "expense": expense.to_dict()})
+
+
+@api.route('/expenses/<int:expense_id>', methods=['DELETE'])
+@jwt_required()
+def delete_expense(expense_id):
+    user_id = get_jwt_identity()
+    expense = Expense.query.filter_by(id=expense_id, user_id=user_id).first()
+
+    if not expense:
+        return jsonify({"message": "Expense not found!"}), 404
+
+    db.session.delete(expense)
+    db.session.commit()
+
+    return jsonify({"message": "Expense deleted successfully!"})
