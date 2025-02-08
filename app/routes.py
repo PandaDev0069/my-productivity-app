@@ -33,6 +33,24 @@ def login():
     access_token = create_access_token(identity=user.id)
     return jsonify({"access_token": access_token, "message": "Login Successful!"})
 
+
+@api.route('/profile', methods=['GET'])
+@jwt_required()
+def get_profile():
+    user_id = get_jwt_identity()
+    user = User.query.filter_by(id=user_id).first()
+
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    return jsonify({
+        "username": user.username,
+        "email": user.email,
+        "xp": 120,  # Placeholder XP (you can calculate based on tasks completed)
+        "streaks": 5  # Placeholder streaks (add logic for actual streak tracking)
+    })
+
+
 # Tasks Section
 
 @api.route('/tasks', methods=['POST'])
