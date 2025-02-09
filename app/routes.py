@@ -65,11 +65,25 @@ def create_task():
     user_id = get_jwt_identity()
     data = request.get_json()
 
-    new_task = Task(title=data['title'], due_date=datetime.strptime(data['due_date'], "%Y-%m-%d %H:%M:%S"), user_id=user_id)
+    if "title" not in data or "due_date" not in data:
+        return jsonify({"message": "Title and due date are required"}), 400
+
+    new_task = Task(
+        title=data["title"],
+        due_date=datetime.strptime(data["due_date"], "%Y-%m-%d %H:%M:%S"),
+        user_id=user_id
+    )
+
     db.session.add(new_task)
     db.session.commit()
 
-    return jsonify({"message": "Task created successfully!"}), 201
+    return jsonify({"message": "Task created successfully!", "task": {
+        "id": new_task.id,
+        "title": new_task.title,
+        "due_date": new_task.due_date.strftime("%Y-%m-%d %H:%M:%S"),
+        "completed": new_task.completed
+    }}), 201
+
 
 
 @api.route("/tasks", methods=["GET"])
@@ -106,10 +120,22 @@ def update_task(task_id):
     if not task:
         return jsonify({"message": "Task not found!"}), 404
 
+    if task.completed:
+        return jsonify({"message": "Task already completed!"}), 400
+
+    # Mark the task as completed
     task.completed = True
+
+    # Increase user's XP by 10
+    user = User.query.get(user_id)
+    user.xp += 10
+
     db.session.commit()
 
-    return jsonify({"message": "Task updated successfully!"})
+    return jsonify({
+        "message": "Task completed!",
+        "new_xp": user.xp
+    })
 
 
 # Notes Section
