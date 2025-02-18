@@ -47,3 +47,5 @@ instance/*
 
 # Log files
 *.log
+instance/database.db
+instance/database.db
