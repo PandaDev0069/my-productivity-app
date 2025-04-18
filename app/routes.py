@@ -70,20 +70,16 @@ def create_task():
 
     new_task = Task(
         title=data["title"],
-        due_date=datetime.strptime(data["due_date"], "%Y-%m-%d %H:%M:%S"),
+        description=data.get("description"),
+        due_date=datetime.fromisoformat(data["due_date"].replace('Z', '+00:00')),
+        recurrence=data.get("recurrence", "none"),
         user_id=user_id
     )
 
     db.session.add(new_task)
     db.session.commit()
 
-    return jsonify({"message": "Task created successfully!", "task": {
-        "id": new_task.id,
-        "title": new_task.title,
-        "due_date": new_task.due_date.strftime("%Y-%m-%d %H:%M:%S"),
-        "completed": new_task.completed
-    }}), 201
-
+    return jsonify({"message": "Task created successfully!", "task": new_task.to_dict()}), 201
 
 
 @api.route("/tasks", methods=["GET"])
@@ -110,7 +106,6 @@ def get_tasks():
         return jsonify({"msg": str(e)}), 422
 
 
-
 @api.route('/tasks/<int:task_id>', methods=['PUT'])
 @jwt_required()
 def update_task(task_id):
@@ -120,21 +115,24 @@ def update_task(task_id):
     if not task:
         return jsonify({"message": "Task not found!"}), 404
 
-    if task.completed:
-        return jsonify({"message": "Task already completed!"}), 400
+    data = request.get_json()
+    task.title = data.get('title', task.title)
+    task.description = data.get('description', task.description)
+    task.due_date = datetime.fromisoformat(data['due_date'].replace('Z', '+00:00')) if 'due_date' in data else task.due_date
+    task.completed = data.get('completed', task.completed)
+    task.recurrence = data.get('recurrence', task.recurrence)
 
-    # Mark the task as completed
-    task.completed = True
-
-    # Increase user's XP by 10
-    user = User.query.get(user_id)
-    user.xp += 10
+    # Only increase XP if the task is being marked as completed
+    if 'completed' in data and data['completed'] and not task.completed:
+        user = User.query.get(user_id)
+        user.xp += 10
 
     db.session.commit()
 
     return jsonify({
-        "message": "Task completed!",
-        "new_xp": user.xp
+        "message": "Task updated successfully!",
+        "task": task.to_dict(),
+        "new_xp": User.query.get(user_id).xp if 'completed' in data and data['completed'] else None
     })
 
 
@@ -163,7 +161,14 @@ def get_calendar_tasks():
         return jsonify({"error": "User not found"}), 404
     
     tasks = Task.query.filter_by(user_id=current_user).all()
-    return jsonify([task.to_dict() for task in tasks])
+    return jsonify([{
+        **task.to_dict(),
+        'color': {
+            'high': '#ea4335',
+            'medium': '#1a73e8',
+            'low': '#34a853'
+        }.get(task.priority, '#1a73e8')
+    } for task in tasks])
 
 
 @api.route('/tasks/<int:task_id>/update-date', methods=['PATCH'])
@@ -185,6 +190,27 @@ def update_task_date(task_id):
         return jsonify(task.to_dict())
     
     return jsonify({"error": "No date provided"}), 400
+
+
+@api.route('/tasks/<int:task_id>/update-priority', methods=['PATCH'])
+@jwt_required()
+def update_task_priority(task_id):
+    current_user = get_jwt_identity()
+    task = Task.query.get(task_id)
+    
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+    if task.user_id != current_user:
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    data = request.get_json()
+    new_priority = data.get('priority')
+    if new_priority in ['low', 'medium', 'high']:
+        task.priority = new_priority
+        db.session.commit()
+        return jsonify(task.to_dict())
+    
+    return jsonify({"error": "Invalid priority value"}), 400
 
 
 # Notes Section

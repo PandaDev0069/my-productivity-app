@@ -19,20 +19,24 @@ class User(db.Model):
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text)
     due_date = db.Column(db.DateTime, nullable=False)
     deadline = db.Column(db.DateTime)  # Optional deadline field
     completed = db.Column(db.Boolean, default=False)
     priority = db.Column(db.String(20), default='medium')  # low, medium, high
+    recurrence = db.Column(db.String(20))  # none, daily, weekly, monthly
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
     def to_dict(self):
         return {
             "id": self.id,
             "title": self.title,
+            "description": self.description,
             "due_date": self.due_date.strftime("%Y-%m-%d %H:%M:%S"),
             "deadline": self.deadline.strftime("%Y-%m-%d %H:%M:%S") if self.deadline else None,
             "completed": self.completed,
-            "priority": self.priority
+            "priority": self.priority,
+            "recurrence": self.recurrence
         }
 
 class Note(db.Model):
