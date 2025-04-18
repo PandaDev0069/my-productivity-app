@@ -20,8 +20,20 @@ class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(255), nullable=False)
     due_date = db.Column(db.DateTime, nullable=False)
+    deadline = db.Column(db.DateTime)  # Optional deadline field
     completed = db.Column(db.Boolean, default=False)
+    priority = db.Column(db.String(20), default='medium')  # low, medium, high
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "due_date": self.due_date.strftime("%Y-%m-%d %H:%M:%S"),
+            "deadline": self.deadline.strftime("%Y-%m-%d %H:%M:%S") if self.deadline else None,
+            "completed": self.completed,
+            "priority": self.priority
+        }
 
 class Note(db.Model):
     id = db.Column(db.Integer, primary_key=True)

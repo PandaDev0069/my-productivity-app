@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from app import db
-from app.models import User, Task  , Note, Expense
+from app.models import User, Task, Note, Expense
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -153,6 +153,38 @@ def delete_task(task_id):
 
     return jsonify({"message": "Task deleted successfully!"})
 
+
+@api.route('/tasks/calendar', methods=['GET'])
+@jwt_required()
+def get_calendar_tasks():
+    current_user = get_jwt_identity()
+    user = User.query.get(current_user)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    tasks = Task.query.filter_by(user_id=current_user).all()
+    return jsonify([task.to_dict() for task in tasks])
+
+
+@api.route('/tasks/<int:task_id>/update-date', methods=['PATCH'])
+@jwt_required()
+def update_task_date(task_id):
+    current_user = get_jwt_identity()
+    task = Task.query.get(task_id)
+    
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+    if task.user_id != current_user:
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    data = request.get_json()
+    new_date = data.get('due_date')
+    if new_date:
+        task.due_date = datetime.fromisoformat(new_date.replace('Z', '+00:00'))
+        db.session.commit()
+        return jsonify(task.to_dict())
+    
+    return jsonify({"error": "No date provided"}), 400
 
 
 # Notes Section
